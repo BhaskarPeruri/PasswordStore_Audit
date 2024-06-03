@@ -1,101 +1,137 @@
+# Protocol Summary 
+PasswordStore is a protocol dedicated to storage and retrieval of a user's passwords. The protocol is designed to be used by a single user, and is not designed to be used by multiple users. Only the owner should be able to set and access this password.
 
-# PasswordStore
 
-<br/>
-<p align="center">
-<img src="./password-store-logo.png" width="400" alt="password-store">
-</p>
-<br/>
+## Roles
 
-A smart contract applicatoin for storing a password. Users should be able to store a password and then retrieve it later. Others should not be able to access the password. 
+- Owner: The user who can set the password and read the password.
+- Outsides: No one else should be able to set or read the password.
 
-- [PasswordStore](#passwordstore)
-- [Getting Started](#getting-started)
-  - [Requirements](#requirements)
-  - [Quickstart](#quickstart)
-    - [Optional Gitpod](#optional-gitpod)
-- [Usage](#usage)
-  - [Deploy (local)](#deploy-local)
-  - [Testing](#testing)
-    - [Test Coverage](#test-coverage)
-- [Audit Scope Details](#audit-scope-details)
-  - [Create the audit report](#create-the-audit-report)
 
-# Getting Started
+## Issues found
 
-## Requirements
+| Severity | Number of issues found |
+| -------- | ---------------------- |
+| High     | 2                      |
+| Medium   | 0                      |
+| Low      | 0                      |
+| Info     | 1                     |
+| Total    | 3                     |
 
-- [git](https://git-scm.com/book/en/v2/Getting-Started-Installing-Git)
-  - You'll know you did it right if you can run `git --version` and you see a response like `git version x.x.x`
-- [foundry](https://getfoundry.sh/)
-  - You'll know you did it right if you can run `forge --version` and you see a response like `forge 0.2.0 (816e00b 2023-03-16T00:05:26.396218Z)`
+# Findings
 
-## Quickstart
 
-```
-git clone https://github.com/Cyfrin/3-passwordstore-audit
-cd 3-passwordstore-audit
-forge build
-```
+### [H-1] Storing the password on-chain makes it visible to anyone, and no longer private
 
-### Optional Gitpod
 
-If you can't or don't want to run and install locally, you can work with this repo in Gitpod. If you do this, you can skip the `clone this repo` part.
+**Description:** All data stored on-chain is visible to anyone, and can be read directly from the blockchain. The `PasswordStore::s_password` variable is intended to be a private variable and only accessed through the `PasswordStore::getPassword` function, which is intended to be only called by the owner of the contract.
 
-[![Open in Gitpod](https://gitpod.io/button/open-in-gitpod.svg)](https://gitpod.io/#github.com/Cyfrin/3-passwordstore-audit)
 
-# Usage
+**Impact:** Anyone can read the private password, severely compromising the functionality of the protocol.
 
-## Deploy (local)
 
-1. Start a local node
-
-```
+**Proof of Concept:**
+1. Create a locally running chain
+```bash
 make anvil
 ```
 
-2. Deploy
-
-This will default to your local node. You need to have it running in another terminal in order for it to deploy.
+2. Deploy the contract to the chain
 
 ```
-make deploy
+make deploy 
 ```
 
-## Testing
+3. Run the storage tool
+
+We use `1` because that's the storage slot of `s_password` in the contract.
 
 ```
-forge test
+cast storage <ADDRESS_HERE> 1 --rpc-url http://127.0.0.1:8545
 ```
 
-### Test Coverage
+You'll get an output that looks like this:
+
+`0x6d7950617373776f726400000000000000000000000000000000000000000014`
+
+You can then parse that hex to a string with:
 
 ```
-forge coverage
+cast parse-bytes32-string 0x6d7950617373776f726400000000000000000000000000000000000000000014
 ```
 
-and for coverage based testing: 
+And get an output of:
 
 ```
-forge coverage --report debug
+myPassword
 ```
 
-# Audit Scope Details
 
-- Commit Hash:  2e8f81e263b3a9d18fab4fb5c46805ffc10a9990
-- In Scope:
+**Recommended Mitigation:** Due to this, the overall architecture of the contract should be rethought. One could encrypt the password off-chain and then store the encrypted password on-chain. This would require the user to remember another password off-chain to decrypt the password. However, you'd also likely want to remove the view function as you wouldn't want the user to accidentally send a transaction with the password that decrypts your password. 
+
+
+
+
+### [H-2] `PasswordStore::setPassword` has no access controls, meaning a non-owner could change the password. 
+
+**Description:** The `PasswordStore::setPassword` function is set to be an `external` function. However, the natspec of the function and overall purpose of the smart contract is that `This function allows only the owner to set a new password.`
+
+```javascript
+    function setPassword(string memory newPassword) external {
+--->     // @audit - There are no access controls here
+        s_password = newPassword;
+        emit SetNetPassword();
+    }
 ```
-./src/
-└── PasswordStore.sol
+
+**Impact:** Anyone can set/change the password of the contract, severely breaking the contract intended functionality.
+
+**Proof of Concept:** Add the following to the  `PasswordStore.t.sol` test file.
+
+<details>
+<summary>Code</summary>
+
+```javascript
+    function test_anyone_can_set_password(address randomAddress)public{
+        vm.assume(randomAddress != owner);
+        vm.prank(randomAddress);
+        string memory expectedPassword = "myNewPassword";
+        passwordStore.setPassword(expectedPassword);
+
+        vm.prank(owner);
+        string memory actualPassword = passwordStore.getPassword();
+        assertEq(actualPassword, expectedPassword);
+    }
 ```
-- Solc Version: 0.8.18
-- Chain(s) to deploy contract to: Ethereum
 
-## Create the audit report
+</details>
 
-View the [audit-report-templating](https://github.com/Cyfrin/audit-report-templating) repo to install all dependencies. 
+**Recommended Mitigation:** Add an access control modifier to the `setPassword` function. 
 
-```bash
-cd audits
-pandoc 2023-09-01-password-store-report.md -o report.pdf --from markdown --template=eisvogel --listings
+```javascript
+if (msg.sender != s_owner) {
+    revert PasswordStore__NotOwner();
+}
+```
+
+### [I-1] The `PasswordStore::getPassword` natspec indicates a parameter that doesn't exist, causing the natspec to be incorrect.
+
+**Description:** 
+```javascript
+    /*
+     * @notice This allows only the owner to retrieve the password.
+@>   * @param newPassword The new password to set.
+     */
+    function getPassword() external view returns (string memory) {
+    //...
+    }
+```
+
+**Impact:**  The natspec is incorrect.
+
+
+**Recommended Mitigation:** Remove the incorrect natspec line.
+
+```diff
+-      * @param newPassword The new password to set
 ```
