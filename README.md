@@ -114,6 +114,7 @@ if (msg.sender != s_owner) {
     revert PasswordStore__NotOwner();
 }
 ```
+# Informational 
 
 ### [I-1] The `PasswordStore::getPassword` natspec indicates a parameter that doesn't exist, causing the natspec to be incorrect.
 
