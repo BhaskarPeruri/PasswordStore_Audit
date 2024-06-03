@@ -7,6 +7,7 @@ PasswordStore is a protocol dedicated to storage and retrieval of a user's passw
 - Owner: The user who can set the password and read the password.
 - Outsides: No one else should be able to set or read the password.
 
+# Executive Summary
 
 ## Issues found
 
