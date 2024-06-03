@@ -1,3 +1,26 @@
+# Protocol Summary 
+PasswordStore is a protocol dedicated to storage and retrieval of a user's passwords. The protocol is designed to be used by a single user, and is not designed to be used by multiple users. Only the owner should be able to set and access this password.
+
+
+## Roles
+
+- Owner: The user who can set the password and read the password.
+- Outsides: No one else should be able to set or read the password.
+
+
+## Issues found
+
+| Severity | Number of issues found |
+| -------- | ---------------------- |
+| High     | 2                      |
+| Medium   | 0                      |
+| Low      | 0                      |
+| Info     | 1                     |
+| Total    | 3                     |
+
+# Findings
+
+
 ### [H-1] Storing the password on-chain makes it visible to anyone, and no longer private
 
 
