@@ -21,6 +21,7 @@ PasswordStore is a protocol dedicated to storage and retrieval of a user's passw
 
 # Findings
 
+# High
 
 ### [H-1] Storing the password on-chain makes it visible to anyone, and no longer private
 
